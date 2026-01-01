@@ -5,197 +5,338 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🕵️ Impostor Fin de Año</title>
     <script src="/socket.io/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        :root { --primary: #ff0055; --sec: #00e5ff; --bg: #121212; --card: #1e1e1e; }
-        body { font-family: 'Poppins', sans-serif; background: var(--bg); color: white; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
+        :root { 
+            --primary: #ff0055; 
+            --sec: #00e5ff; 
+            --bg: #121212; 
+            --card: #1e1e1e; 
+            --success: #00ff88;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         
-        /* Animación de fondo */
-        body::before { content: ''; position: absolute; width: 200%; height: 200%; background: radial-gradient(circle, rgba(255,0,85,0.15), transparent); animation: rotate 20s linear infinite; z-index: -1; }
+        /* Evitar selección de texto (Anti-trampa) */
+        body { 
+            font-family: 'Poppins', sans-serif; 
+            background: var(--bg); 
+            color: white; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+            overflow: hidden; 
+            user-select: none; /* CLAVE PARA NO COPIAR */
+            -webkit-user-select: none;
+        }
+
+        /* Fondo animado sutil */
+        body::before { 
+            content: ''; position: absolute; width: 200%; height: 200%; 
+            background: radial-gradient(circle, rgba(255,0,85,0.08), transparent); 
+            animation: rotate 30s linear infinite; z-index: -1; 
+        }
         @keyframes rotate { 0% { transform: translate(-50%, -50%) rotate(0deg); } 100% { transform: translate(-50%, -50%) rotate(360deg); } }
 
-        .container { width: 90%; max-width: 400px; text-align: center; z-index: 10; }
+        .container { width: 100%; max-width: 450px; padding: 20px; text-align: center; z-index: 10; position: relative; }
         
-        /* Pantallas */
-        .screen { display: none; animation: fadeIn 0.5s ease; }
-        .active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .screen { display: none; opacity: 0; transition: opacity 0.4s ease; }
+        .screen.active { display: block; opacity: 1; }
 
-        h1 { font-size: 2.5rem; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px var(--primary); margin-bottom: 20px; }
-        
-        input { width: 100%; padding: 15px; border-radius: 50px; border: none; background: #333; color: white; font-size: 1.2rem; text-align: center; margin-bottom: 20px; outline: none; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-        
-        button { width: 100%; padding: 15px; border-radius: 50px; border: none; font-size: 1.2rem; font-weight: bold; cursor: pointer; transition: transform 0.1s; margin-bottom: 10px; text-transform: uppercase; }
-        .btn-primary { background: linear-gradient(45deg, var(--primary), #ff5e00); color: white; box-shadow: 0 0 20px rgba(255,0,85,0.4); }
-        .btn-sec { background: linear-gradient(45deg, var(--sec), #0051ff); color: white; }
-        button:active { transform: scale(0.95); }
+        h1 { font-size: 2.2rem; margin-bottom: 20px; text-shadow: 0 0 15px rgba(255,0,85,0.5); }
+        h2 { font-size: 1.5rem; color: #aaa; margin-bottom: 15px; }
+        p { color: #ccc; }
 
-        .player-list { list-style: none; padding: 0; margin: 20px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .player-item { background: var(--card); padding: 10px; border-radius: 10px; border: 1px solid #333; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
+        input { 
+            width: 100%; padding: 18px; border-radius: 12px; border: 2px solid #333; 
+            background: #222; color: white; font-size: 1.1rem; text-align: center; 
+            margin-bottom: 20px; outline: none; transition: 0.3s;
+        }
+        input:focus { border-color: var(--sec); background: #2a2a2a; }
 
-        .role-card { background: var(--card); padding: 30px; border-radius: 20px; border: 2px solid var(--sec); margin: 20px 0; box-shadow: 0 0 30px rgba(0,229,255,0.2); }
-        .impostor-theme { border-color: var(--primary); box-shadow: 0 0 30px rgba(255,0,85,0.3); }
+        button { 
+            width: 100%; padding: 18px; border-radius: 12px; border: none; 
+            font-size: 1.1rem; font-weight: 700; cursor: pointer; 
+            transition: transform 0.1s, filter 0.2s; text-transform: uppercase; 
+            margin-bottom: 12px;
+        }
+        button:active { transform: scale(0.96); }
         
-        .secret-word { font-size: 3rem; font-weight: bold; margin: 20px 0; filter: blur(10px); cursor: pointer; transition: 0.3s; user-select: none; }
-        .secret-word:active, .secret-word.revealed { filter: blur(0); }
-        
-        .vote-btn { background: #333; margin: 5px; }
-        .vote-btn.selected { border: 2px solid var(--primary); background: #444; }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), #ff5e00); color: white; box-shadow: 0 4px 15px rgba(255,0,85,0.3); }
+        .btn-sec { background: #333; color: white; border: 1px solid #444; }
+        .btn-action { background: linear-gradient(135deg, var(--sec), #0051ff); color: white; box-shadow: 0 4px 15px rgba(0,229,255,0.3); }
 
-        .winner-text { font-size: 3rem; font-weight: 900; color: var(--sec); }
-        .impostor-win { color: var(--primary); }
+        /* Lista de Jugadores */
+        .player-list { 
+            list-style: none; padding: 0; margin: 20px 0; 
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; 
+        }
+        .player-item { 
+            background: #252525; padding: 10px; border-radius: 8px; font-size: 0.9rem;
+            border: 1px solid #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
+        /* Tarjeta de Rol (Anti-Sapos) */
+        .card-container { perspective: 1000px; margin: 20px 0; height: 180px; }
+        .secret-box {
+            width: 100%; height: 100%; background: #1a1a1a; 
+            border-radius: 15px; border: 2px dashed #444;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; position: relative; overflow: hidden;
+            transition: 0.2s;
+            -webkit-user-select: none;
+        }
+        
+        /* Capa de ocultamiento */
+        .secret-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #222; z-index: 2;
+            display: flex; align-items: center; justify-content: center; flex-direction: column;
+            transition: opacity 0.1s;
+        }
+        .secret-content {
+            z-index: 1; font-size: 2rem; font-weight: 900; text-transform: uppercase;
+            padding: 10px; opacity: 0; transform: scale(0.8); transition: 0.2s;
+        }
+
+        /* Al presionar (Active state) */
+        .secret-box:active { border-color: #666; background: #151515; }
+        .secret-box:active .secret-overlay { opacity: 0; pointer-events: none; }
+        .secret-box:active .secret-content { opacity: 1; transform: scale(1); }
+
+        /* Icono de dedo */
+        .finger-icon { font-size: 2rem; margin-bottom: 10px; animation: bounce 1s infinite; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+        .impostor-text { color: var(--primary); }
+        .civilian-text { color: var(--sec); }
+
+        /* Votación */
+        .vote-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+        .vote-btn { background: #2a2a2a; border: 1px solid #444; padding: 15px; border-radius: 8px; color: white; }
+        .vote-btn.selected { background: var(--primary); border-color: var(--primary); }
+
+        /* Resultado */
+        .winner-box { padding: 30px; border-radius: 20px; background: #1a1a1a; margin-bottom: 20px; border: 1px solid #333; }
+        .winner-title { font-size: 2.5rem; font-weight: 900; margin: 0; }
+        .win-imp { color: var(--primary); }
+        .win-civ { color: var(--success); }
+
     </style>
 </head>
 <body>
 
 <div class="container">
+    
     <div id="screen-login" class="screen active">
-        <h1>🤫 Impostor</h1>
-        <input type="text" id="username" placeholder="Tu Nombre" maxlength="10">
-        <button class="btn-primary" onclick="joinGame()">Entrar</button>
+        <div style="font-size: 3rem; margin-bottom: 10px;">🤫</div>
+        <h1>El Impostor</h1>
+        <p>Edición Fin de Año</p>
+        <input type="text" id="username" placeholder="Tu Nombre" maxlength="12" autocomplete="off">
+        <button class="btn-primary" onclick="joinGame()">Entrar a la Sala</button>
     </div>
 
     <div id="screen-lobby" class="screen">
         <h2>Sala de Espera</h2>
-        <p>Jugadores conectados:</p>
-        <ul id="lobby-list" class="player-list"></ul>
-        <button id="start-btn" class="btn-primary" onclick="socket.emit('startGame')" style="display:none">INICIAR PARTIDA</button>
-        <p style="font-size: 0.8rem; opacity: 0.7;">Esperando al anfitrión...</p>
+        <div class="player-list" id="lobby-list">
+            </div>
+        <div id="host-controls" style="display:none; margin-top: 20px;">
+            <button class="btn-action" onclick="socket.emit('startGame')">🚀 INICIAR PARTIDA</button>
+            <p style="font-size: 0.8rem; margin-top: 5px;">(Solo tú ves este botón)</p>
+        </div>
+        <p id="waiting-msg" style="margin-top: 20px; font-style: italic; opacity: 0.7;">Esperando al administrador...</p>
     </div>
 
     <div id="screen-game" class="screen">
-        <h2 id="role-title">Tu Rol</h2>
-        <div id="card-box" class="role-card">
-            <p>Mantén presionado para ver:</p>
-            <div id="the-word" class="secret-word" onmousedown="this.classList.add('revealed')" onmouseup="this.classList.remove('revealed')" ontouchstart="this.classList.add('revealed')" ontouchend="this.classList.remove('revealed')">???</div>
+        <h2>Tu Misión</h2>
+        
+        <div class="card-container">
+            <div class="secret-box" id="secret-card" 
+                 ontouchstart="revealCard()" ontouchend="hideCard()" 
+                 onmousedown="revealCard()" onmouseup="hideCard()"
+                 onmouseleave="hideCard()">
+                
+                <div class="secret-overlay">
+                    <div class="finger-icon">👆</div>
+                    <span>MANTÉN PRESIONADO<br>PARA VER TU ROL</span>
+                </div>
+                
+                <div id="secret-word" class="secret-content">
+                    ???
+                </div>
+            </div>
         </div>
-        <p class="instruction">Si eres civil, describe la palabra sin ser obvio.</p>
-        <p class="instruction">Si eres impostor, ¡miente y encaja!</p>
-        <button id="vote-start-btn" class="btn-sec" onclick="socket.emit('startVoting')">Ir a Votación</button>
+
+        <p style="font-size: 0.9rem; margin: 20px 0; color: #888;">
+            No dejes que nadie vea tu pantalla.<br>Cuando estén listos, voten.
+        </p>
+
+        <button id="vote-btn" class="btn-sec" onclick="socket.emit('startVoting')">🗳️ IR A VOTACIÓN</button>
     </div>
 
     <div id="screen-vote" class="screen">
-        <h2>🗳️ ¡A Votar!</h2>
-        <p>¿Quién es el impostor?</p>
-        <div id="vote-list"></div>
+        <h2>¿Quién es el impostor?</h2>
+        <p>Toca el nombre para votar</p>
+        <div id="vote-grid" class="vote-grid"></div>
+        <p id="vote-status" style="margin-top: 20px; color: var(--sec)"></p>
     </div>
 
     <div id="screen-result" class="screen">
-        <h1 id="winner-announce" class="winner-text">GANAN</h1>
-        <p id="result-msg"></p>
-        <button class="btn-primary" onclick="location.reload()">Jugar Otra Vez</button>
+        <div class="winner-box">
+            <p style="font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px;">Ganador</p>
+            <div id="winner-title" class="winner-title">???</div>
+        </div>
+        <p id="result-message" style="font-size: 1.1rem; line-height: 1.5;"></p>
+        
+        <div id="restart-controls" style="display:none; margin-top: 30px;">
+            <button class="btn-primary" onclick="socket.emit('restartGame')">🔄 Jugar Otra Vez</button>
+        </div>
+        <p id="waiting-restart" style="display:none; opacity: 0.6;">Esperando que el admin reinicie...</p>
     </div>
+
 </div>
 
 <script>
     const socket = io();
     let myId = null;
+    let myRole = null;
+    let myWord = null;
 
-    // Elementos
-    const screens = {
-        login: document.getElementById('screen-login'),
-        lobby: document.getElementById('screen-lobby'),
-        game: document.getElementById('screen-game'),
-        vote: document.getElementById('screen-vote'),
-        result: document.getElementById('screen-result')
-    };
-
-    function showScreen(name) {
-        Object.values(screens).forEach(s => s.classList.remove('active'));
-        screens[name].classList.add('active');
+    // Gestión de Pantallas
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
     }
 
     function joinGame() {
-        const username = document.getElementById('username').value;
-        if(!username) return alert("Pon un nombre!");
+        const username = document.getElementById('username').value.trim();
+        if(!username) return alert("¡Epa! Escribe un nombre.");
         socket.emit('join', username);
-        showScreen('lobby');
     }
 
-    // Eventos Socket
-    socket.on('connect', () => myId = socket.id);
+    // --- SOCKET EVENTOS ---
 
+    socket.on('connect', () => { myId = socket.id; });
+
+    // Login Exitoso
+    socket.on('joinedSuccess', (player) => {
+        showScreen('screen-lobby');
+    });
+
+    // Error (ej: nombre duplicado)
+    socket.on('error', (msg) => { alert(msg); });
+
+    // Actualizar Lobby
     socket.on('updatePlayers', (players) => {
         const list = document.getElementById('lobby-list');
-        list.innerHTML = players.map(p => `<li class="player-item">${p.avatar} ${p.username}</li>`).join('');
-        
-        // El primer jugador es el admin/host
-        if(players[0].id === myId && players.length >= 3) {
-            document.getElementById('start-btn').style.display = 'block';
-        }
-    });
+        list.innerHTML = players.map(p => `
+            <div class="player-item">👤 ${p.username}</div>
+        `).join('');
 
-    socket.on('gameStarted', ({ role, word }) => {
-        showScreen('game');
-        const wordEl = document.getElementById('the-word');
-        const cardBox = document.getElementById('card-box');
-        
-        if (role === 'impostor') {
-            wordEl.textContent = "😈 ERES EL IMPOSTOR";
-            wordEl.style.fontSize = "1.5rem";
-            cardBox.classList.add('impostor-theme');
+        // Solo el primer jugador (Host) puede iniciar
+        // Si hay al menos 3 jugadores
+        if(players.length > 0 && players[0].id === myId) {
+            document.getElementById('host-controls').style.display = players.length >= 3 ? 'block' : 'none';
+            document.getElementById('waiting-msg').style.display = 'none';
+            document.getElementById('restart-controls').style.display = 'block';
+            document.getElementById('waiting-restart').style.display = 'none';
         } else {
-            wordEl.textContent = word;
-            cardBox.classList.remove('impostor-theme');
+            document.getElementById('host-controls').style.display = 'none';
+            document.getElementById('waiting-msg').style.display = 'block';
+            document.getElementById('restart-controls').style.display = 'none';
+            document.getElementById('waiting-restart').style.display = 'block';
         }
         
-        // Solo el primer jugador puede iniciar votación (simplificado)
-        // Ocultar botón si no eres "host" (lógica simple visual)
-        // En una app real validaríamos host, aquí lo dejamos abierto o todos pueden
+        window.currentPlayers = players; // Guardar referencia para votación
     });
 
+    // Iniciar Juego
+    socket.on('gameStarted', ({ role, word }) => {
+        myRole = role;
+        myWord = word;
+        
+        const wordEl = document.getElementById('secret-word');
+        
+        // Renderizar contenido oculto
+        if(role === 'impostor') {
+            wordEl.innerHTML = `<span class="impostor-text">😈<br>IMPOSTOR</span>`;
+        } else {
+            wordEl.innerHTML = `<span class="civilian-text">${word}</span>`;
+        }
+        
+        showScreen('screen-game');
+    });
+
+    // Estado de Votación
     socket.on('stateChange', (state) => {
         if(state === 'VOTING') {
-            showScreen('vote');
-            // Generar botones de voto
-            const voteList = document.getElementById('vote-list');
-            // Pedimos la lista de jugadores de nuevo o la guardamos localmente
-            // Para simplificar, la UI se actualiza reactivamente, aquí asumimos que players está en memoria
-            // Mejor: recargar lista
-        }
-    });
-    
-    // Necesitamos la lista de jugadores actualizada para votar
-    socket.on('updatePlayers', (p) => {
-        window.currentPlayers = p;
-        if(document.getElementById('screen-vote').classList.contains('active')){
-            renderVoteButtons();
+            setupVoting();
+            showScreen('screen-vote');
         }
     });
 
-    function renderVoteButtons() {
-        const container = document.getElementById('vote-list');
-        container.innerHTML = window.currentPlayers.map(p => {
-            if(p.id === myId) return ''; // No votarse a sí mismo
-            return `<button class="btn-primary vote-btn" onclick="sendVote('${p.id}')">${p.username}</button>`;
-        }).join('');
-    }
-
-    // Fix: renderizar botones al entrar a votación
-    const obs = new MutationObserver((mutations) => {
-        mutations.forEach((m) => {
-            if(m.target.id === 'screen-vote' && m.target.classList.contains('active')){
-                renderVoteButtons();
-            }
-        });
-    });
-    obs.observe(document.getElementById('screen-vote'), { attributes: true });
-
-
-    function sendVote(id) {
-        socket.emit('vote', id);
-        document.getElementById('vote-list').innerHTML = "<h3>⏳ Esperando votos...</h3>";
-    }
-
+    // Fin del Juego
     socket.on('gameOver', ({ winner, message }) => {
-        showScreen('result');
-        const wText = document.getElementById('winner-announce');
-        wText.textContent = winner === 'IMPOSTOR' ? '😈 GANA EL IMPOSTOR' : '😇 GANAN LOS CIVILES';
-        wText.className = winner === 'IMPOSTOR' ? 'winner-text impostor-win' : 'winner-text';
-        document.getElementById('result-msg').textContent = message;
+        showScreen('screen-result');
+        const title = document.getElementById('winner-title');
+        const msg = document.getElementById('result-message');
+        
+        if(winner === 'IMPOSTOR') {
+            title.textContent = "IMPOSTOR";
+            title.className = "winner-title win-imp";
+        } else {
+            title.textContent = "CIVILES";
+            title.className = "winner-title win-civ";
+        }
+        msg.textContent = message;
     });
 
-    socket.on('error', (msg) => alert(msg));
+    // Reiniciar Juego (Vuelve al lobby)
+    socket.on('resetToLobby', () => {
+        myRole = null;
+        myWord = null;
+        document.getElementById('vote-grid').innerHTML = '';
+        document.getElementById('vote-status').textContent = '';
+        showScreen('screen-lobby');
+    });
+
+    // --- FUNCIONES INTERFAZ ---
+
+    // Anti-Sapos Reveal
+    function revealCard() {
+        document.querySelector('.secret-box').classList.add('active'); // Clase auxiliar por si acaso
+    }
+    function hideCard() {
+        document.querySelector('.secret-box').classList.remove('active');
+    }
+
+    function setupVoting() {
+        const grid = document.getElementById('vote-grid');
+        grid.innerHTML = window.currentPlayers
+            .filter(p => p.id !== myId) // No votarse a sí mismo
+            .map(p => `
+                <button class="vote-btn" onclick="castVote('${p.id}', this)">
+                    ${p.username}
+                </button>
+            `).join('');
+    }
+
+    function castVote(targetId, btnElement) {
+        // Bloquear todos los botones visualmente
+        const btns = document.querySelectorAll('.vote-btn');
+        btns.forEach(b => {
+            b.disabled = true; 
+            b.style.opacity = 0.5;
+        });
+        
+        btnElement.classList.add('selected');
+        btnElement.style.opacity = 1;
+        
+        document.getElementById('vote-status').textContent = "Esperando a los demás...";
+        socket.emit('vote', targetId);
+    }
 </script>
 </body>
 </html>

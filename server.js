@@ -9,35 +9,49 @@ const io = new Server(server);
 app.use(express.static('public'));
 
 let players = [];
-let gameState = 'LOBBY'; // LOBBY, PLAYING, VOTING, RESULT
+let gameState = 'LOBBY'; 
 let impostorId = null;
 let currentWord = "";
 let votes = {};
 
-// Palabras para el juego
+// 🇻🇪 LISTA NAVIDEÑA VENEZOLANA MEJORADA
 const wordList = [
-    "Fuegos Artificiales", "Uvas", "Champagne", "Cena Navideña", 
-    "Suegra", "Regalos", "Aguinaldo", "Hallaca", "Pan de Jamón",
-    "Lentejas", "Maletas", "Propósitos", "Resaca", "Karaoke"
+    "Hallaca", "Pan de Jamón", "Ensalada de Gallina", "Pernil", 
+    "Ponche Crema", "Gaitas", "El Cañonazo", "Las 12 Uvas", 
+    "Maletas afuera", "Billete en el zapato", "Lentejas", 
+    "Torta Negra", "Amigo Secreto", "Estrenos", "Viejo Año",
+    "Fuegos Artificiales", "La Billo's", "Intercambio de Regalos",
+    "Uvas del Tiempo", "Brindis", "Tío borracho"
 ];
 
 io.on('connection', (socket) => {
-    console.log('Nuevo jugador conectado:', socket.id);
+    console.log('Jugador conectado:', socket.id);
 
     socket.on('join', (username) => {
+        // 1. Validación de estado
         if (gameState !== 'LOBBY') {
-            socket.emit('error', 'Partida en curso, espera a que termine.');
+            socket.emit('error', 'Partida en curso. Espera que terminen.');
             return;
         }
-        const player = { id: socket.id, username, avatar: '😎', role: 'civilian', alive: true };
+
+        // 2. Validación de nombre duplicado
+        const nameExists = players.some(p => p.username.toLowerCase() === username.toLowerCase());
+        if (nameExists) {
+            socket.emit('error', '¡Ese nombre ya está en uso! Ponte otro.');
+            return;
+        }
+
+        const player = { id: socket.id, username, role: 'civilian' };
         players.push(player);
+        
+        // Confirmamos al usuario que entró exitosamente
+        socket.emit('joinedSuccess', player); 
         io.emit('updatePlayers', players);
     });
 
     socket.on('startGame', () => {
-        if (players.length < 3) return; // Mínimo 3
+        if (players.length < 3) return; 
         
-        // Reset
         gameState = 'PLAYING';
         votes = {};
         currentWord = wordList[Math.floor(Math.random() * wordList.length)];
@@ -48,7 +62,6 @@ io.on('connection', (socket) => {
 
         players.forEach((p, index) => {
             p.role = (index === impostorIndex) ? 'impostor' : 'civilian';
-            p.alive = true;
         });
 
         // Enviar roles
@@ -71,21 +84,35 @@ io.on('connection', (socket) => {
         if (gameState !== 'VOTING') return;
         votes[socket.id] = targetId;
 
-        // Comprobar si todos votaron
-        if (Object.keys(votes).length === players.length) {
+        // Verificar si todos (menos los desconectados) votaron
+        const activePlayers = players.length;
+        if (Object.keys(votes).length >= activePlayers) {
             calculateWinner();
         }
     });
 
-    socket.on('restart', () => {
+    // 3. LOGICA DE REINICIO CORREGIDA
+    socket.on('restartGame', () => {
         gameState = 'LOBBY';
-        players = []; // Opcional: limpiar jugadores o mantenerlos
-        io.emit('resetGame');
+        votes = {};
+        impostorId = null;
+        currentWord = "";
+        // Mantenemos a los jugadores conectados, solo limpiamos roles
+        players.forEach(p => p.role = 'civilian');
+        
+        io.emit('resetToLobby'); // Evento global para mover pantallas
+        io.emit('updatePlayers', players);
     });
 
     socket.on('disconnect', () => {
         players = players.filter(p => p.id !== socket.id);
         io.emit('updatePlayers', players);
+        
+        // Si se vacía la sala, resetear server por seguridad
+        if (players.length === 0) {
+            gameState = 'LOBBY';
+            votes = {};
+        }
     });
 });
 
@@ -94,36 +121,41 @@ function calculateWinner() {
     let maxVotes = 0;
     let eliminatedId = null;
 
+    // Contar votos
     Object.values(votes).forEach(id => {
         voteCounts[id] = (voteCounts[id] || 0) + 1;
-        if (voteCounts[id] > maxVotes) {
-            maxVotes = voteCounts[id];
-            eliminatedId = id;
-        }
     });
 
-    // Lógica simple: El más votado pierde.
-    // Si el eliminado es el impostor, ganan los civiles.
-    // Si quedan 2 personas y el impostor sigue vivo, gana el impostor.
+    // Determinar eliminado (mayoría simple)
+    // En caso de empate, eliminamos al primero que alcanzó el máximo (simple)
+    for (const [id, count] of Object.entries(voteCounts)) {
+        if (count > maxVotes) {
+            maxVotes = count;
+            eliminatedId = id;
+        }
+    }
+
+    const impostorObj = players.find(p => p.id === impostorId);
+    const eliminatedObj = players.find(p => p.id === eliminatedId);
     
-    const impostorName = players.find(p => p.id === impostorId)?.username || "Nadie";
-    const eliminatedName = players.find(p => p.id === eliminatedId)?.username || "Nadie";
+    const impostorName = impostorObj ? impostorObj.username : "Desconectado";
+    const eliminatedName = eliminatedObj ? eliminatedObj.username : "Nadie";
     
-    let resultMessage = "";
     let winner = "";
+    let message = "";
 
     if (eliminatedId === impostorId) {
         winner = "CIVILES";
-        resultMessage = `¡Atraparon al impostor! Era ${impostorName}.`;
+        message = `¡Buena esa! Atrapadon a ${impostorName}.`;
     } else {
         winner = "IMPOSTOR";
-        resultMessage = `¡Se equivocaron! Eliminaron a ${eliminatedName}. El impostor era ${impostorName}.`;
+        message = `¡Se pelaron! Sacaron a ${eliminatedName}. El impostor era ${impostorName}.`;
     }
 
-    io.emit('gameOver', { winner, message: resultMessage });
+    io.emit('gameOver', { winner, message });
     gameState = 'RESULT';
 }
 
 server.listen(3000, () => {
-    console.log('Server corriendo en puerto 3000');
+    console.log('Server listo en puerto 3000');
 });
