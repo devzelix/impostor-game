@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🕵️ Impostor Fin de Año</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root { --primary: #ff0055; --sec: #00e5ff; --bg: #121212; --card: #1e1e1e; }
+        body { font-family: 'Poppins', sans-serif; background: var(--bg); color: white; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
+        
+        /* Animación de fondo */
+        body::before { content: ''; position: absolute; width: 200%; height: 200%; background: radial-gradient(circle, rgba(255,0,85,0.15), transparent); animation: rotate 20s linear infinite; z-index: -1; }
+        @keyframes rotate { 0% { transform: translate(-50%, -50%) rotate(0deg); } 100% { transform: translate(-50%, -50%) rotate(360deg); } }
+
+        .container { width: 90%; max-width: 400px; text-align: center; z-index: 10; }
+        
+        /* Pantallas */
+        .screen { display: none; animation: fadeIn 0.5s ease; }
+        .active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        h1 { font-size: 2.5rem; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px var(--primary); margin-bottom: 20px; }
+        
+        input { width: 100%; padding: 15px; border-radius: 50px; border: none; background: #333; color: white; font-size: 1.2rem; text-align: center; margin-bottom: 20px; outline: none; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        
+        button { width: 100%; padding: 15px; border-radius: 50px; border: none; font-size: 1.2rem; font-weight: bold; cursor: pointer; transition: transform 0.1s; margin-bottom: 10px; text-transform: uppercase; }
+        .btn-primary { background: linear-gradient(45deg, var(--primary), #ff5e00); color: white; box-shadow: 0 0 20px rgba(255,0,85,0.4); }
+        .btn-sec { background: linear-gradient(45deg, var(--sec), #0051ff); color: white; }
+        button:active { transform: scale(0.95); }
+
+        .player-list { list-style: none; padding: 0; margin: 20px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .player-item { background: var(--card); padding: 10px; border-radius: 10px; border: 1px solid #333; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
+
+        .role-card { background: var(--card); padding: 30px; border-radius: 20px; border: 2px solid var(--sec); margin: 20px 0; box-shadow: 0 0 30px rgba(0,229,255,0.2); }
+        .impostor-theme { border-color: var(--primary); box-shadow: 0 0 30px rgba(255,0,85,0.3); }
+        
+        .secret-word { font-size: 3rem; font-weight: bold; margin: 20px 0; filter: blur(10px); cursor: pointer; transition: 0.3s; user-select: none; }
+        .secret-word:active, .secret-word.revealed { filter: blur(0); }
+        
+        .vote-btn { background: #333; margin: 5px; }
+        .vote-btn.selected { border: 2px solid var(--primary); background: #444; }
+
+        .winner-text { font-size: 3rem; font-weight: 900; color: var(--sec); }
+        .impostor-win { color: var(--primary); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="screen-login" class="screen active">
+        <h1>🤫 Impostor</h1>
+        <input type="text" id="username" placeholder="Tu Nombre" maxlength="10">
+        <button class="btn-primary" onclick="joinGame()">Entrar</button>
+    </div>
+
+    <div id="screen-lobby" class="screen">
+        <h2>Sala de Espera</h2>
+        <p>Jugadores conectados:</p>
+        <ul id="lobby-list" class="player-list"></ul>
+        <button id="start-btn" class="btn-primary" onclick="socket.emit('startGame')" style="display:none">INICIAR PARTIDA</button>
+        <p style="font-size: 0.8rem; opacity: 0.7;">Esperando al anfitrión...</p>
+    </div>
+
+    <div id="screen-game" class="screen">
+        <h2 id="role-title">Tu Rol</h2>
+        <div id="card-box" class="role-card">
+            <p>Mantén presionado para ver:</p>
+            <div id="the-word" class="secret-word" onmousedown="this.classList.add('revealed')" onmouseup="this.classList.remove('revealed')" ontouchstart="this.classList.add('revealed')" ontouchend="this.classList.remove('revealed')">???</div>
+        </div>
+        <p class="instruction">Si eres civil, describe la palabra sin ser obvio.</p>
+        <p class="instruction">Si eres impostor, ¡miente y encaja!</p>
+        <button id="vote-start-btn" class="btn-sec" onclick="socket.emit('startVoting')">Ir a Votación</button>
+    </div>
+
+    <div id="screen-vote" class="screen">
+        <h2>🗳️ ¡A Votar!</h2>
+        <p>¿Quién es el impostor?</p>
+        <div id="vote-list"></div>
+    </div>
+
+    <div id="screen-result" class="screen">
+        <h1 id="winner-announce" class="winner-text">GANAN</h1>
+        <p id="result-msg"></p>
+        <button class="btn-primary" onclick="location.reload()">Jugar Otra Vez</button>
+    </div>
+</div>
+
+<script>
+    const socket = io();
+    let myId = null;
+
+    // Elementos
+    const screens = {
+        login: document.getElementById('screen-login'),
+        lobby: document.getElementById('screen-lobby'),
+        game: document.getElementById('screen-game'),
+        vote: document.getElementById('screen-vote'),
+        result: document.getElementById('screen-result')
+    };
+
+    function showScreen(name) {
+        Object.values(screens).forEach(s => s.classList.remove('active'));
+        screens[name].classList.add('active');
+    }
+
+    function joinGame() {
+        const username = document.getElementById('username').value;
+        if(!username) return alert("Pon un nombre!");
+        socket.emit('join', username);
+        showScreen('lobby');
+    }
+
+    // Eventos Socket
+    socket.on('connect', () => myId = socket.id);
+
+    socket.on('updatePlayers', (players) => {
+        const list = document.getElementById('lobby-list');
+        list.innerHTML = players.map(p => `<li class="player-item">${p.avatar} ${p.username}</li>`).join('');
+        
+        // El primer jugador es el admin/host
+        if(players[0].id === myId && players.length >= 3) {
+            document.getElementById('start-btn').style.display = 'block';
+        }
+    });
+
+    socket.on('gameStarted', ({ role, word }) => {
+        showScreen('game');
+        const wordEl = document.getElementById('the-word');
+        const cardBox = document.getElementById('card-box');
+        
+        if (role === 'impostor') {
+            wordEl.textContent = "😈 ERES EL IMPOSTOR";
+            wordEl.style.fontSize = "1.5rem";
+            cardBox.classList.add('impostor-theme');
+        } else {
+            wordEl.textContent = word;
+            cardBox.classList.remove('impostor-theme');
+        }
+        
+        // Solo el primer jugador puede iniciar votación (simplificado)
+        // Ocultar botón si no eres "host" (lógica simple visual)
+        // En una app real validaríamos host, aquí lo dejamos abierto o todos pueden
+    });
+
+    socket.on('stateChange', (state) => {
+        if(state === 'VOTING') {
+            showScreen('vote');
+            // Generar botones de voto
+            const voteList = document.getElementById('vote-list');
+            // Pedimos la lista de jugadores de nuevo o la guardamos localmente
+            // Para simplificar, la UI se actualiza reactivamente, aquí asumimos que players está en memoria
+            // Mejor: recargar lista
+        }
+    });
+    
+    // Necesitamos la lista de jugadores actualizada para votar
+    socket.on('updatePlayers', (p) => {
+        window.currentPlayers = p;
+        if(document.getElementById('screen-vote').classList.contains('active')){
+            renderVoteButtons();
+        }
+    });
+
+    function renderVoteButtons() {
+        const container = document.getElementById('vote-list');
+        container.innerHTML = window.currentPlayers.map(p => {
+            if(p.id === myId) return ''; // No votarse a sí mismo
+            return `<button class="btn-primary vote-btn" onclick="sendVote('${p.id}')">${p.username}</button>`;
+        }).join('');
+    }
+
+    // Fix: renderizar botones al entrar a votación
+    const obs = new MutationObserver((mutations) => {
+        mutations.forEach((m) => {
+            if(m.target.id === 'screen-vote' && m.target.classList.contains('active')){
+                renderVoteButtons();
+            }
+        });
+    });
+    obs.observe(document.getElementById('screen-vote'), { attributes: true });
+
+
+    function sendVote(id) {
+        socket.emit('vote', id);
+        document.getElementById('vote-list').innerHTML = "<h3>⏳ Esperando votos...</h3>";
+    }
+
+    socket.on('gameOver', ({ winner, message }) => {
+        showScreen('result');
+        const wText = document.getElementById('winner-announce');
+        wText.textContent = winner === 'IMPOSTOR' ? '😈 GANA EL IMPOSTOR' : '😇 GANAN LOS CIVILES';
+        wText.className = winner === 'IMPOSTOR' ? 'winner-text impostor-win' : 'winner-text';
+        document.getElementById('result-msg').textContent = message;
+    });
+
+    socket.on('error', (msg) => alert(msg));
+</script>
+</body>
+</html>
